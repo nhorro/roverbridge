@@ -8,6 +8,10 @@ from math import sin, cos, pi
 
 from geometry_msgs.msg import Point, Pose, Quaternion, Twist, Vector3
 from nav_msgs.msg import Odometry
+from sensor_msgs.msg import Imu
+
+from roverbridge.msg import general_tmy
+from roverbridge.srv import set_arm, set_led, move
 
 DEFAULT_ROVER_ID = 'rover'
 DEFAULT_ROVER_PORT = '/dev/serial0'
@@ -47,15 +51,7 @@ class RoverBridge:
             self.handle_command_execution_status_report,
             self.handle_ahrs_state_report
         ]
-        self.rover = RoverClient(port,baudrate, self.report_handlers)
-        self.rover.connect()
-        
-        # Suscribers
-        self.vehicle_id = vehicle_id
-        self.cmd_vel_topic = self.vehicle_id+"/"+"cmd_vel"
-        rospy.loginfo("Suscribed to %s" % self.cmd_vel_topic)
-        rospy.Subscriber(self.cmd_vel_topic, Twist, self.cmd_vel_callback)
-
+ 
         # Publishers
 
         # Odometry
@@ -64,10 +60,57 @@ class RoverBridge:
         self.odom_broadcaster = tf.TransformBroadcaster()
         
         # TODO General TMY
+        self.gen_tmy_msg = general_tmy()
+        self.tmy_pub = rospy.Publisher(vehicle_id+"/"+"tmy", general_tmy, queue_size=10)
         
-        # TODO IMU
+        # IMU
+        self.imu_msg = Imu()
+        self.imu_seq = 0
+        self.imu_pub = rospy.Publisher('sensor_msg/imu', Imu, queue_size=10)
 
         # TODO GPS
+
+        # Services
+        rospy.Service('set_arm', set_arm, self.handle_set_arm)
+        rospy.Service('set_led', set_led, self.handle_set_led)
+        rospy.Service('move', move, self.handle_move)
+
+        
+
+        # Suscribers
+        self.vehicle_id = vehicle_id
+        self.cmd_vel_topic = self.vehicle_id+"/"+"cmd_vel"
+        rospy.loginfo("Suscribed to %s" % self.cmd_vel_topic)
+        rospy.Subscriber(self.cmd_vel_topic, Twist, self.cmd_vel_callback)
+
+        # When everythings ok, connect the rover
+        self.rover = RoverClient(port,baudrate, self.report_handlers)
+        self.rover.connect()
+
+    def handle_set_arm(self,req):
+        if req.state:
+            rospy.loginfo("ARMING.")
+        else:
+            rospy.loginfo("DISARMING.")
+        return 1
+
+    def handle_set_led(self,req):
+        if req.state:
+            rospy.loginfo("Turning on test led.")
+            self.rover.led_on()
+        else:
+            rospy.loginfo("Turning off test led.")
+            self.rover.led_off()
+        return 1
+
+    def handle_move(self,req):        
+        return self.rover.move(
+            [ req.interval_phase_0, req.interval_phase_1 ],
+            [
+                [req.motor_a_phase_0,req.motor_b_phase_0],
+                [req.motor_a_phase_1,req.motor_b_phase_1],
+            ]
+        )
         
     def run(self):
         while not rospy.is_shutdown():
@@ -145,7 +188,11 @@ class RoverBridge:
     # Publishers :: General TMY
     def handle_general_tmy_report(self, payload):
         rospy.logdebug("General telemetry report received")
-        pass
+        self.gen_tmy_msg.serial_fail = False
+        self.gen_tmy_msg.ahrs_fail = True
+        self.gen_tmy_msg.gps_fail = True
+        self.gen_tmy_msg.armed = True
+        self.tmy_pub.publish(self.gen_tmy_msg)        
 
     def handle_command_execution_status_report(self, payload):
         rospy.logdebug("Command execution status report received")
@@ -156,21 +203,34 @@ class RoverBridge:
 
         imu_status = payload[1]
         imu_values = struct.unpack("<10f", payload[4:])
+
+        q = tf.transformations.quaternion_from_euler(0.0,0.0,self.theta)
+        self.imu_msg.linear_acceleration.x = imu_values[0]
+        self.imu_msg.linear_acceleration.y = imu_values[1]
+        self.imu_msg.linear_acceleration.z = imu_values[2]
+        self.imu_msg.angular_velocity.x = imu_values[3]
+        self.imu_msg.angular_velocity.y = imu_values[4]
+        self.imu_msg.angular_velocity.z = imu_values[5]
+        self.imu_msg.orientation.x = imu_values[6]
+        self.imu_msg.orientation.y = imu_values[7]
+        self.imu_msg.orientation.z = imu_values[8]
+        self.imu_msg.header.stamp = rospy.Time.now()
+        self.imu_msg.header.frame_id = "imu"
+        self.imu_msg.header.seq = self.imu_seq
+        
+        self.imu_pub.publish(self.imu_msg)
+        self.imu_seq += 1
         
         """           
         print("IMU Status:", imu_status)
         for i in imu_values:
             print(i)
-                 
+
         tmp = "Payload (" + str(len(payload)) + " bytes) :"
         for x in payload:
             tmp+= "%02X " % x
         print(tmp)
-        """
-        
-
-    # Publishers :: IMU
-    # Publishers :: GPS
+        """        
 
 def str2bool(v):
     if isinstance(v, bool):

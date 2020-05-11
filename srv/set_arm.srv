@@ -1,0 +1,5 @@
+# Rover Service
+# ARM/DISARM motors
+bool state
+---
+int8 result

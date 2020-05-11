@@ -50,18 +50,18 @@ find_package(catkin REQUIRED COMPONENTS
 ## Generate messages in the 'msg' folder
 add_message_files(
    FILES
-    general_tmy.msg
-    
+    general_tmy.msg    
 #   Message1.msg
 #   Message2.msg
  )
 
 ## Generate services in the 'srv' folder
-# add_service_files(
-#   FILES
-#   Service1.srv
-#   Service2.srv
-# )
+add_service_files(
+   FILES
+   set_led.srv
+   set_arm.srv
+   move.srv
+)
 
 ## Generate actions in the 'action' folder
 # add_action_files(

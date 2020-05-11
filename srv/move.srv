@@ -1,0 +1,9 @@
+# Set motor speeds
+float32 interval_phase_0
+int16 motor_a_phase_0
+int16 motor_b_phase_0
+float32 interval_phase_1
+int16 motor_a_phase_1
+int16 motor_b_phase_1
+---
+int8 result

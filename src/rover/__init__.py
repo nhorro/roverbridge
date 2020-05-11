@@ -1,9 +1,48 @@
 from .serialprotocol import Connection, build_packet
 import time
 import rospy
+import threading 
 
 DEFAULT_ROVER_PORT = '/dev/ttyACM0'
 DEFAULT_ROVER_BAUDRATE = 115200
+
+class MotorStateController:
+    def __init__(self, rover):
+        self.motor_current_phase = 0
+        self.motor_state = 0 # 0 Idle, 1 = Executing      
+        self.rover = rover
+
+    def move( self, intervals, motor_values ):
+        if self.motor_state == 0:
+            self.phase_parameters = [
+                [ 0, [ motor_values[0][0], motor_values[0][1] ] ],
+                [ intervals[0], [ motor_values[1][0], motor_values[1][1] ] ],
+                [ intervals[1], [0, 0] ]
+            ]
+            self.motor_state = 1
+            self.current_phase = 0      
+            start_time = threading.Timer(  
+                self.phase_parameters[self.current_phase][0], 
+                self.execute_phase )
+            start_time.start()  
+            return True
+        else:
+            return False
+
+    def execute_phase(self):
+        self.rover.update_motor_speeds(
+            self.phase_parameters[self.current_phase][1], RoverClient.MOTOR_A | RoverClient.MOTOR_B
+        )        
+        self.current_phase += 1
+        if self.current_phase < len(self.phase_parameters):
+            start_time = threading.Timer( 
+                self.phase_parameters[self.current_phase][0], 
+                self.execute_phase )
+            start_time.start()  
+        else:
+            self.motor_state = 0
+
+
 
 class RoverClient(Connection):        
     CMD_REQUEST_TMY = 0
@@ -17,6 +56,7 @@ class RoverClient(Connection):
     def __init__(self, port, baudrate, report_handlers):  
         Connection.__init__(self,port,baudrate, self.on_data_received)
         self.report_handlers = report_handlers
+        self.motor_state_ctl = MotorStateController(self)
 
     # Basic Protocol Leds and TMY
     def request_tmy(self, report_type=0):
@@ -60,3 +100,16 @@ class RoverClient(Connection):
             else:
                 rospy.logerror("Unknown report type: ", report_id)
                 
+
+    def move(self,intervals, motor_speeds):
+        """
+        mpe.move( 
+            [ 0.5, 5], 
+            [
+                [100, 100],
+                [50, 50]
+            ]
+        )                
+        """
+        return self.motor_state_ctl.move(intervals, motor_speeds)
+
