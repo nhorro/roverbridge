@@ -56,17 +56,17 @@ class RoverBridge:
 
         # Odometry
         self.odom_msg = Odometry()
-        self.odom_pub = rospy.Publisher("odom", Odometry, queue_size=50)
+        self.odom_pub = rospy.Publisher("odom", Odometry, queue_size=1)
         self.odom_broadcaster = tf.TransformBroadcaster()
         
         # TODO General TMY
         self.gen_tmy_msg = general_tmy()
-        self.tmy_pub = rospy.Publisher(vehicle_id+"/"+"tmy", general_tmy, queue_size=10)
+        self.tmy_pub = rospy.Publisher(vehicle_id+"/"+"tmy", general_tmy, queue_size=1)
         
         # IMU
         self.imu_msg = Imu()
         self.imu_seq = 0
-        self.imu_pub = rospy.Publisher('sensor_msg/imu', Imu, queue_size=10)
+        self.imu_pub = rospy.Publisher('sensor_msg/imu', Imu, queue_size=1)
 
         # TODO GPS
 
@@ -152,38 +152,43 @@ class RoverBridge:
             self.x += self.vx*dt
             self.y += self.vy*dt
 
-            odom_quat = tf.transformations.quaternion_from_euler(0, 0, self.theta)
-            self.odom_broadcaster.sendTransform(
-                (self.x, self.y, 0.),
-                odom_quat,
-                current_time,
-                "base_link",
-                "odom"
-            )
-
-            # next, we'll publish the odometry message over ROS    
-            self.odom_msg.header.stamp = current_time
-            self.odom_msg.header.frame_id = "odom"
-
-            # set the position
-            self.odom_msg.pose.pose = Pose(
-                Point(self.x, self.y, 0.), Quaternion(*odom_quat)
-            )
-
-            # set the velocity
-            self.odom_msg.child_frame_id = "base_link"
-            self.odom_msg.twist.twist = Twist(
-                Vector3(self.vx, self.vy, 0.), 
-                Vector3(0, 0, self.vtheta)
-            )
-
-            # publish the message
-            self.odom_pub.publish(self.odom_msg)
+            self.send_odometry(current_time)
     
         if self.simulate_imu:
             pass
 
         self.last_time = current_time
+
+
+    def send_odometry(self, current_time):
+        odom_quat = tf.transformations.quaternion_from_euler(0, 0, self.theta)
+        self.odom_broadcaster.sendTransform(
+            (self.x, self.y, 0.),
+            odom_quat,
+            current_time,
+            "base_link",
+            "odom"
+        )
+
+        # next, we'll publish the odometry message over ROS    
+        self.odom_msg.header.stamp = current_time
+        self.odom_msg.header.frame_id = "odom"
+
+        # set the position
+        self.odom_msg.pose.pose = Pose(
+            Point(self.x, self.y, 0.), Quaternion(*odom_quat)
+        )
+
+        # set the velocity
+        self.odom_msg.child_frame_id = "base_link"
+        self.odom_msg.twist.twist = Twist(
+            Vector3(self.vx, self.vy, 0.), 
+            Vector3(0, 0, self.vtheta)
+        )
+
+        # publish the message
+        self.odom_pub.publish(self.odom_msg)
+
 
     # Publishers :: General TMY
     def handle_general_tmy_report(self, payload):

@@ -6,5 +6,7 @@
     <param name="pixel_format" value="yuyv" />
     <param name="camera_frame_id" value="usb_cam" />
     <param name="io_method" value="mmap"/>
+    <! check si funciona -->
+    <param name="/camera/image/compressed/jpeg_quality" value="80"/>
   </node>
 </launch>
