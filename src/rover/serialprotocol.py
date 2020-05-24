@@ -43,10 +43,6 @@ def is_packet_header_valid(pkt):
             return True
     return False
 
-def is_packet_length_valid(pkt):
-
-    return False    
-
 def get_packet_payload(pkt):
     ret = bytearray()
     if is_packet_header_valid(pkt):

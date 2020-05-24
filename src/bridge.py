@@ -30,10 +30,15 @@ class RoverBridge:
 
         # Initial parameters
         self.last_time = rospy.Time.now()
-        # Position
+        # Position and orientation
         self.x = 0.0          
         self.y = 0.0         
-        self.theta = 0.0       
+        #self.theta = 0.0       
+
+        self.pitch = 0.0
+        self.roll = 0.0
+        self.yaw = 0.0  # (theta)
+
         # Velocity
         self.vx = 0.0
         self.vy = 0.0
@@ -148,7 +153,6 @@ class RoverBridge:
             # TODO: replace for unicycle model
             self.vx = self.v * cos(self.vtheta)
             self.vy = self.v * sin(self.vtheta)
-            self.theta += self.vtheta*dt
             self.x += self.vx*dt
             self.y += self.vy*dt
 
@@ -161,7 +165,8 @@ class RoverBridge:
 
 
     def send_odometry(self, current_time):
-        odom_quat = tf.transformations.quaternion_from_euler(0, 0, self.theta)
+        # Note: the firmware uses a different convention
+        odom_quat = tf.transformations.quaternion_from_euler(-self.roll, -self.pitch, self.yaw)
         self.odom_broadcaster.sendTransform(
             (self.x, self.y, 0.),
             odom_quat,
@@ -193,10 +198,19 @@ class RoverBridge:
     # Publishers :: General TMY
     def handle_general_tmy_report(self, payload):
         rospy.logdebug("General telemetry report received")
+
+        #accepted_packets = payload[1]
+        #rejected_packets = payload[2]
+        #last_opcode = payload[3]
+        #last_error = payload[4]
+        status = payload[5]
         self.gen_tmy_msg.serial_fail = False
-        self.gen_tmy_msg.ahrs_fail = True
-        self.gen_tmy_msg.gps_fail = True
+        self.gen_tmy_msg.ahrs_fail = status & 0x01
+        self.gen_tmy_msg.gps_fail = status & 0x02
         self.gen_tmy_msg.armed = True
+        self.gen_tmy_msg.pitch = self.pitch * 180.0
+        self.gen_tmy_msg.roll = self.roll * 180.0
+        self.gen_tmy_msg.yaw = self.yaw * 180.0
         self.tmy_pub.publish(self.gen_tmy_msg)        
 
     def handle_command_execution_status_report(self, payload):
@@ -207,9 +221,8 @@ class RoverBridge:
         rospy.logdebug("AHRS report received")
 
         imu_status = payload[1]
-        imu_values = struct.unpack("<10f", payload[4:])
+        imu_values = struct.unpack("<16f", payload[4:])
 
-        q = tf.transformations.quaternion_from_euler(0.0,0.0,self.theta)
         self.imu_msg.linear_acceleration.x = imu_values[0]
         self.imu_msg.linear_acceleration.y = imu_values[1]
         self.imu_msg.linear_acceleration.z = imu_values[2]
@@ -220,13 +233,26 @@ class RoverBridge:
         self.imu_msg.orientation.y = imu_values[7]
         self.imu_msg.orientation.z = imu_values[8]
         self.imu_msg.header.stamp = rospy.Time.now()
-        self.imu_msg.header.frame_id = "imu"
+        self.imu_msg.header.frame_id = "odom"
         self.imu_msg.header.seq = self.imu_seq
+
+        # Update odometry orientation
+        # Note: the firmware uses a different convention
+        self.pitch = imu_values[10] 
+        self.roll = imu_values[11] 
+        self.yaw = imu_values[12]
+        self.send_odometry(rospy.Time.now()) #FIXME
+
+        print("Pitch:", self.pitch  * 57.2958 )
+        print("Roll:", self.roll * 57.2958 )
+        print("Yaw:", self.yaw * 57.2958 )
         
         self.imu_pub.publish(self.imu_msg)
         self.imu_seq += 1
+
+   
         
-        """           
+        """
         print("IMU Status:", imu_status)
         for i in imu_values:
             print(i)
@@ -235,7 +261,9 @@ class RoverBridge:
         for x in payload:
             tmp+= "%02X " % x
         print(tmp)
-        """        
+        """
+        
+        
 
 def str2bool(v):
     if isinstance(v, bool):
