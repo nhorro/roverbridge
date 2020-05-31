@@ -208,9 +208,9 @@ class RoverBridge:
         self.gen_tmy_msg.ahrs_fail = status & 0x01
         self.gen_tmy_msg.gps_fail = status & 0x02
         self.gen_tmy_msg.armed = True
-        self.gen_tmy_msg.pitch = self.pitch * 180.0
-        self.gen_tmy_msg.roll = self.roll * 180.0
-        self.gen_tmy_msg.yaw = self.yaw * 180.0
+        self.gen_tmy_msg.pitch = self.pitch * 57.2958
+        self.gen_tmy_msg.roll = self.roll * 57.2958
+        self.gen_tmy_msg.yaw = self.yaw * 57.2958
         self.tmy_pub.publish(self.gen_tmy_msg)        
 
     def handle_command_execution_status_report(self, payload):
@@ -243,13 +243,19 @@ class RoverBridge:
         self.yaw = imu_values[12]
         self.send_odometry(rospy.Time.now()) #FIXME
 
-        print("Pitch:", self.pitch  * 57.2958 )
-        print("Roll:", self.roll * 57.2958 )
-        print("Yaw:", self.yaw * 57.2958 )
+        #print("Pitch:", self.pitch  * 57.2958 )
+        #print("Roll:", self.roll * 57.2958 )
+        #print("Yaw:", self.yaw * 57.2958 )
         
         self.imu_pub.publish(self.imu_msg)
         self.imu_seq += 1
 
+
+        # FIXME: publicar en tmy general por ahora
+        self.gen_tmy_msg.pitch = self.pitch * 57.2958
+        self.gen_tmy_msg.roll = self.roll * 57.2958
+        self.gen_tmy_msg.yaw = self.yaw * 57.2958
+        self.tmy_pub.publish(self.gen_tmy_msg)        
    
         
         """
